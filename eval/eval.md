@@ -1,128 +1,61 @@
-# SGR-BENCH 评测代码实施准则
+# SGR-BENCH Evaluation Protocol
 
-本文档仅依据 `D Extended Limitations Discussion` 所述内容整理，用于约束 `SGR-BENCH` 评测代码的实现范围、评分重点与结果解释方式。本文不引入超出原文的新设定；如需扩展，应单独说明其并非当前版本既有规范。
+This document summarizes the controlled evaluation setup used in the main SGR-BENCH evaluation.
 
-## 1. 评测范围与覆盖边界
+## 1. Controlled CLI Evaluation Scope
 
-### 1.1 优先覆盖相对稳定的公开接口
+The configuration described here applies to the eight CLI-based systems used in the main evaluation:
 
-评测代码应优先面向以下类型的数据来源与交互对象：
+- Kimi K2.5
+- GLM-5.1
+- Qwen3.6-Plus
+- DeepSeek V4 Pro
+- Seed-2.0 Pro
+- Claude Opus 4.7
+- Gemini 3.1 Pro
+- GPT-5.5
 
-- 公共可访问来源
-- 相关表格、记录与筛选逻辑在一段时间内相对稳定的接口
-- 有利于稳定真值构建、可复现实证核验与可靠评分的页面或数据入口
+All eight systems are evaluated under a common search-fetch-PDF retrieval setup. Observed performance differences therefore reflect system behavior under a matched retrieval-tool regime rather than differences in the available external tools.
 
-这样做的目的，是提升：
+## 2. Prompt Template and Controlled Protocol
 
-- 标注质量
-- 基准的可复现性
-- 基准的长期可用性
+All agents receive the same task prompt. Each prompt consists of:
 
-### 1.2 不应将当前评测实现解释为通用实时 Web 搜索评测
+- the current date
+- the benchmark task instruction
+- the required structured output schema
 
-当前评测代码的适用范围，应被限定为：
+Prompts do not provide a start URL. They instruct agents to solve the task through the designated search, fetch, and PDF tools while prohibiting alternative retrieval paths.
 
-- 面向结构化、状态驱动检索
-- 面向相对稳定的公开接口
+## 3. Exposed Tools and Runtime Restrictions
 
-因此，评测实现不应默认覆盖或代表以下场景：
+Across all eight CLI systems, the runtime exposes only three external retrieval tool classes:
 
-- 高频变化的网页内容
-- 突发新闻
-- 实时运营看板
-- 快速刷新的公开记录
-- 排名、可见性或可访问性会在短时间窗口内显著变化的接口
+- Serper search
+- fetch-based webpage reading
+- PDF reading
 
-评测结果的解释也应遵循这一边界：`SGR-BENCH` 适合作为“相对稳定公开接口下的结构化状态检索”评测，而不是所有实时 Web 搜索环境的综合代理。
+For the Claude Code systems, each run uses a project-level MCP configuration under a strict MCP configuration so that only the designated search, fetch, and PDF tools are available during execution. A companion settings file additionally disables the Claude-native WebSearch and WebFetch tools, ensuring that all evaluated systems operate under the same external retrieval-tool budget.
 
-## 2. 评分目标与主评测口径
+GPT-5.5 is executed through Codex CLI rather than Claude Code CLI, but its implementation is aligned to the same evaluation controls, including prompt constraints, exposed retrieval tools, task isolation, and runtime budget.
 
-### 2.1 以最终结构化输出正确性为主
+## 4. Execution Budget and Task Isolation
 
-当前评测代码的主评分对象，应当是模型的最终结构化答案是否正确。该口径与基准的核心目标保持一致，并支持在异构系统之间进行模型无关比较。
+Each task is executed in an independent session, with no context shared across tasks.
 
-因此，评测主流程应围绕以下目标组织：
+The execution budget is defined as follows:
 
-- 接收系统最终提交的结构化答案
-- 对最终结构化答案执行正确性判定
-- 输出可用于跨系统比较的结果指标
+- maximum runtime per task: 6000 seconds
+- stalled threshold: 3000 seconds without trace progress
+- answer extraction polling interval: every 5 seconds during execution
+- effort setting for all CLI-based systems: medium
 
-### 2.2 轨迹信息可以辅助诊断，但不应伪装为统一主评分
+## 5. Commercial System Evaluation
 
-原文明确指出，当前版本尚未提供统一的轨迹级评测框架。因此，评测代码在处理过程数据时，应遵守以下约束：
+Google Search AI Mode, Gemini Deep Research, and OpenAI Deep Research are evaluated through manual interaction with their respective web interfaces.
 
-- 可以保留或导出中间轨迹用于人工审查
-- 可以用人工轨迹审计辅助定位主导性失败模式
-- 不应声称已经对不同系统的中间行为完成统一、系统性的轨迹级打分
+For these systems:
 
-当前可被人工审计关注的失败模式，包括但不限于：
-
-- 检索范围漂移
-- 条件或标准不匹配
-
-## 3. 当前版本未统一评分的中间行为
-
-按照原文表述，当前版本尚不能系统性评分下列中间行为。因此，评测代码不应把这些行为包装为已被统一定义、统一量化的正式主指标：
-
-- 查询改写
-- 页面选择
-- 过滤器操作
-- 分支决策
-- 检索状态转换
-
-这些行为在未来可以成为扩展方向，尤其适用于研究“错误如何在最终输出暴露之前产生”。但在当前版本中，它们应被视为未来工作方向，而不是既成的统一评分标准。
-
-## 4. 评测规模与用途边界
-
-### 4.1 当前规模是受控的
-
-评测实现应默认服务于“受控基准评测”和“对比诊断”，而不是面向大规模训练优化。其原因在于，基准构建本身需要：
-
-- 领域相关候选发现
-- 任务特定分解
-- 参考答案核验
-- 对捷径鲁棒性的专家审查
-
-因此，当前版本在规模上相对克制，这是有意设计，而不是遗漏。
-
-### 4.2 不应将其作为独立的大规模后训练资源
-
-评测代码与相关文档中，应明确避免将 `SGR-BENCH` 描述为以下用途的自足资源：
-
-- 高吞吐后训练流水线
-- 基于强化学习的大规模优化
-- 需要显著更大、更多样任务集合的训练场景
-
-在定位上，`SGR-BENCH` 更适合被视为：
-
-- 评测资源
-- 诊断资源
-
-而不是：
-
-- 自给自足的训练语料
-
-## 5. 构建期偏差简短声明
-
-基准构建过程中虽可存在 `LLM` 辅助起草，但其作用仅限于支持性草拟，且最终核验与纳入由人工完成；因此在结果解释中仍应注意可能残留少量构建期偏差。
-
-## 6. 实施层面的最低合规要求
-
-为与原文保持一致，当前版本评测代码至少应满足以下实现约束：
-
-1. 主评分必须以最终结构化输出正确性为中心。
-2. 评测对象应优先来自相对稳定的公开接口。
-3. 不应把当前实现表述为对实时、强动态 Web 检索环境的全面评测。
-4. 可以支持人工轨迹审计，但不应宣称已具备统一轨迹级评分框架。
-5. 不应把当前基准定位为大规模后训练或强化学习优化的独立训练资源。
-
-## 7. 非目标声明
-
-以下能力或定位，不属于当前版本评测代码应默认承诺的范围：
-
-- 全实时网页环境评测
-- 对所有中间检索行为的统一量化评分
-- 面向大规模后训练的数据供给
-- 完全无偏的基准构建保证
-
-以上边界不是缺陷描述，而是当前版本在覆盖范围、诊断精度与可复现性之间所做的有意取舍。
+- the task prompt is provided as-is
+- the final output is collected without modification
+- no intermediate trajectory data is available
