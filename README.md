@@ -4,7 +4,7 @@ This repository contains the implementation guidelines for SGR-BENCH evaluation.
 
 ## Repository Structure
 
-- `eval/eval.markdown`: concrete implementation guidelines for the SGR-BENCH evaluation code
+- `eval/eval.md`: concrete implementation guidelines for the SGR-BENCH evaluation code
 
 ## Scope
 
